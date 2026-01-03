@@ -90,6 +90,7 @@ def main() -> None:
     # Fix Windows console encoding for UTF-8 output
     if sys.platform == "win32":
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
     parser = argparse.ArgumentParser(
         description="Google Custom Search CLI Tool - Search the web and get JSON results"

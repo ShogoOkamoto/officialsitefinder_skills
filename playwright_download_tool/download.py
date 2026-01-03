@@ -2,8 +2,14 @@
 
 import asyncio
 import sys
+import io
 from playwright.async_api import async_playwright
 from extract import extract_text
+
+# Force UTF-8 encoding for stdout/stderr (Windows compatibility)
+if sys.platform == 'win32':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 
 async def get_html_and_extract_text(url: str, output_format: str = "text") -> str:
