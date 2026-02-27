@@ -210,3 +210,5 @@ __marimo__/
 #custom
 .claude/
 .env
+.mcp.json
+log.txt
