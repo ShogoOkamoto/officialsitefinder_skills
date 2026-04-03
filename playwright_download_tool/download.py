@@ -1,6 +1,7 @@
 """Download HTML using Playwright and extract plain text."""
 
 import asyncio
+import json
 import sys
 import io
 from playwright.async_api import async_playwright
@@ -12,16 +13,17 @@ if sys.platform == 'win32':
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 
-async def get_html_and_extract_text(url: str, output_format: str = "text") -> str:
+async def get_html_and_extract_text(url: str, output_format: str = "text"):
     """
     Download HTML from URL using Playwright and extract plain text.
 
     Args:
         url: URL to download
-        output_format: Output format - "text" for plain text, "html" for raw HTML
+        output_format: Output format - "text" for plain text, "html" for raw HTML,
+                       "json" for {"title": ..., "text": ...}
 
     Returns:
-        Extracted text or raw HTML content
+        str for "text"/"html", dict for "json"
 
     Raises:
         Exception: If page loading or text extraction fails
@@ -36,6 +38,10 @@ async def get_html_and_extract_text(url: str, output_format: str = "text") -> st
 
             if output_format == "html":
                 return content
+            elif output_format == "json":
+                title = await page.title()
+                text = extract_text(content)
+                return {"title": title, "text": text}
             else:
                 # Extract plain text from HTML
                 text = extract_text(content)
@@ -50,9 +56,10 @@ async def main():
     """Main entry point for command-line usage."""
     # Parse command-line arguments
     if len(sys.argv) < 2:
-        print("Usage: python download.py <URL> [--format=text|html]", file=sys.stderr)
+        print("Usage: python download.py <URL> [--format=text|html|json]", file=sys.stderr)
         print("Example: python download.py https://example.com", file=sys.stderr)
         print("Example: python download.py https://example.com --format=html", file=sys.stderr)
+        print("Example: python download.py https://example.com --format=json", file=sys.stderr)
         sys.exit(1)
 
     url = sys.argv[1]
@@ -61,13 +68,16 @@ async def main():
     # Parse optional format argument
     if len(sys.argv) > 2 and sys.argv[2].startswith("--format="):
         output_format = sys.argv[2].split("=")[1]
-        if output_format not in ["text", "html"]:
-            print(f"Error: Invalid format '{output_format}'. Use 'text' or 'html'.", file=sys.stderr)
+        if output_format not in ["text", "html", "json"]:
+            print(f"Error: Invalid format '{output_format}'. Use 'text', 'html', or 'json'.", file=sys.stderr)
             sys.exit(1)
 
     try:
         result = await get_html_and_extract_text(url, output_format)
-        print(result)
+        if isinstance(result, dict):
+            print(json.dumps(result, ensure_ascii=False))
+        else:
+            print(result)
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)

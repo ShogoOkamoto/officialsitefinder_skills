@@ -27,13 +27,13 @@ Official Site Finder System
 ├── officialsite_finder_tool (Main Integration)
 │   └── Orchestrates:
 │       ├── google_search_tool (Web Search)
-│       ├── extract_address_tool (Address Extraction)
+│       ├── extract_full_address_tool (Address Extraction)
 │       ├── compare_address_tool (Address Matching)
 │       └── playwright_download_tool (HTML Download)
 ├── Claude Skills (.claude/skills/)
 │   ├── officialsite_finder_skill ⭐ PRIMARY
 │   ├── google_search_skill
-│   └── extract_address_skill
+│   └── extract_full_address_skill
 └── MCP Server
     └── google_search_mcp
 ```
@@ -183,12 +183,11 @@ MCP (Model Context Protocol) server for Claude Desktop integration. Provides Goo
 - **Usage**: Configure in Claude Desktop as MCP server
 - **Documentation**: [google_search_mcp/README.md](google_search_mcp/README.md)
 
-### extract_address_tool
-Extracts Japanese addresses (prefecture to city level) from plain text.
+### extract_full_address_tool
+Extracts Japanese full addresses (prefecture down to 丁目・番地・号) from plain text.
 
-- **Location**: `extract_address_tool/`
-- **Usage**: `echo "text" | python -m extract_address_tool.extract`
-- **Documentation**: [extract_address_tool/CLAUDE.md](extract_address_tool/CLAUDE.md)
+- **Location**: `extract_full_address_tool/`
+- **Usage**: `echo "text" | python -m extract_full_address_tool.extract`
 
 ### compare_address_tool
 Normalizes and compares Japanese addresses for matching.

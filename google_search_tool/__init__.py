@@ -87,10 +87,13 @@ def main() -> None:
     import argparse
     import io
 
-    # Fix Windows console encoding for UTF-8 output
+    # Fix Windows console encoding for UTF-8 output.
+    # Only wrap when the stream is the real system stream (not a test mock).
     if sys.platform == "win32":
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+        if sys.stdout is sys.__stdout__ and hasattr(sys.stdout, 'buffer'):
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+        if sys.stderr is sys.__stderr__ and hasattr(sys.stderr, 'buffer'):
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
     parser = argparse.ArgumentParser(
         description="Google Custom Search CLI Tool - Search the web and get JSON results"

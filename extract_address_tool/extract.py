@@ -1,12 +1,13 @@
 """Japanese address extraction module.
 
 This module extracts Japanese addresses (from prefecture to city/ward/town/village)
-from plain text and returns them as a JSON array.
+from plain text and returns them as JSON. Street-level details (丁目・番地・号) are
+intentionally omitted; use extract_full_address_tool if those are needed.
 """
 
 import re
 import json
-from typing import List, Dict
+from typing import List
 
 
 # 47 prefectures in Japan
@@ -22,11 +23,42 @@ PREFECTURES = [
 ]
 
 
+def _build_patterns():
+    """Build regex patterns for city-level address extraction."""
+    prefecture_pattern = '|'.join(re.escape(pref) for pref in PREFECTURES)
+
+    # City/ward/town/village name - excludes common delimiters
+    city_name = r'(?:(?!と|や|及び|、|。)[ぁ-んァ-ヶー一-龠々\d])+'
+
+    # Non-capturing pattern for basic extraction:
+    #   Pattern 1: 東京都 → 大阪市 → (北区)?
+    #   Pattern 2: 青森県上北郡 → 六戸町
+    basic_pattern = (
+        f'(?:{prefecture_pattern})(?:[^と、。\\s]*郡)?(?:{city_name})市(?:{city_name}区)?'
+        f'|'
+        f'(?:{prefecture_pattern})(?:[^と、。\\s]*郡)?(?:{city_name})(?:区|町|村)'
+    )
+
+    # Capturing pattern for detailed extraction
+    # Pattern 1 groups: (1)pref (2)county? (3)city_name (4)市 (5)ward_opt?
+    # Pattern 2 groups: (6)pref (7)county? (8)city_name (9)区|町|村
+    detail_pattern = (
+        f'({prefecture_pattern})([^と、。\\s]*郡)?({city_name})(市)({city_name}区)?'
+        f'|'
+        f'({prefecture_pattern})([^と、。\\s]*郡)?({city_name})(区|町|村)'
+    )
+
+    return basic_pattern, detail_pattern
+
+
+_BASIC_PATTERN, _DETAIL_PATTERN = _build_patterns()
+
+
 def extract_addresses(text: str) -> str:
     """
-    Extract Japanese addresses from plain text.
+    Extract Japanese addresses from plain text (up to city/ward/town/village level).
 
-    Extracts addresses from prefecture to city/ward/town/village level.
+    Street-level details (丁目・番地・号, hyphenated block numbers) are NOT included.
     Returns results as a JSON array string.
 
     Args:
@@ -36,7 +68,7 @@ def extract_addresses(text: str) -> str:
         JSON string containing array of extracted addresses
 
     Example:
-        >>> text = "本社は東京都渋谷区にあります。支社は大阪府大阪市です。"
+        >>> text = "本社は東京都渋谷区道玄坂1丁目2番3号です。支社は大阪府大阪市です。"
         >>> result = extract_addresses(text)
         >>> print(result)
         ["東京都渋谷区", "大阪府大阪市"]
@@ -45,44 +77,20 @@ def extract_addresses(text: str) -> str:
         return json.dumps([], ensure_ascii=False)
 
     addresses = []
-
-    # Create regex pattern for prefectures
-    prefecture_pattern = '|'.join(re.escape(pref) for pref in PREFECTURES)
-
-    # Pattern to match: Prefecture + (optional: gun/county) + city/ward/town/village
-    # Examples: 東京都渋谷区, 北海道札幌市, 京都府京都市中京区, 神奈川県横浜市青葉区
-    # Pattern explanation:
-    # - (prefecture): One of 47 prefectures
-    # - ([^と、。\s]*郡)?: Optional county (郡) - excludes separators
-    # - City/ward/town/village name: Uses negative lookahead to exclude delimiters
-    # - (市|区|町|村): City, ward, town, or village suffix
-    # - Additional ward after city (limited to reasonable length)
-
-    # Pattern for city/ward/town/village names - excludes common delimiters
-    city_name = r'(?:(?!と|や|及び|、|。)[ぁ-んァ-ヶー一-龠々\d])+'
-
-    pattern = f'({prefecture_pattern})([^と、。\\s]*郡)?({city_name})(市)({city_name}区)?|({prefecture_pattern})([^と、。\\s]*郡)?({city_name})(区|町|村)'
-
-    # Find all matches
-    matches = re.finditer(pattern, text)
-
-    seen = set()  # To avoid duplicates
-    for match in matches:
+    seen = set()
+    for match in re.finditer(_BASIC_PATTERN, text):
         address = match.group(0)
-        # Only add if not already seen (avoid duplicates)
         if address not in seen:
             addresses.append(address)
             seen.add(address)
 
-    # Return as JSON array
     return json.dumps(addresses, ensure_ascii=False, indent=2)
 
 
 def extract_addresses_list(text: str) -> List[str]:
     """
-    Extract Japanese addresses from plain text.
+    Extract Japanese addresses from plain text (up to city/ward/town/village level).
 
-    Extracts addresses from prefecture to city/ward/town/village level.
     Returns results as a Python list.
 
     Args:
@@ -91,64 +99,54 @@ def extract_addresses_list(text: str) -> List[str]:
     Returns:
         List of extracted addresses
     """
-    json_result = extract_addresses(text)
-    return json.loads(json_result)
+    return json.loads(extract_addresses(text))
 
 
 def extract_addresses_detailed(text: str) -> str:
     """
-    Extract Japanese addresses with detailed information.
+    Extract Japanese addresses with detailed component breakdown.
 
-    Returns addresses with structured components (prefecture, city, etc.)
-    as a JSON array.
+    Returns addresses with structured components (prefecture, county, city)
+    as a JSON array. Street-level details are NOT included.
 
     Args:
         text: Plain text to extract addresses from
 
     Returns:
-        JSON string containing array of address objects with components
+        JSON string containing array of address objects with components:
+        - full_address: Complete address string (city level)
+        - prefecture: Prefecture name (e.g., "東京都")
+        - county: County name if present (e.g., "上北郡"), or null
+        - city: City/ward/town/village (e.g., "渋谷区")
     """
     if not text:
         return json.dumps([], ensure_ascii=False)
 
     addresses = []
-
-    # Create regex pattern for prefectures
-    prefecture_pattern = '|'.join(re.escape(pref) for pref in PREFECTURES)
-
-    # Pattern for city/ward/town/village names - excludes common delimiters
-    city_name = r'(?:(?!と|や|及び|、|。)[ぁ-んァ-ヶー一-龠々\d])+'
-
-    # Pattern with capture groups for each component
-    pattern = f'({prefecture_pattern})([^と、。\\s]*郡)?({city_name})(市)({city_name}区)?|({prefecture_pattern})([^と、。\\s]*郡)?({city_name})(区|町|村)'
-
-    matches = re.finditer(pattern, text)
-
     seen = set()
-    for match in matches:
+    for match in re.finditer(_DETAIL_PATTERN, text):
         full_address = match.group(0)
+        if full_address in seen:
+            continue
 
-        if full_address not in seen:
-            # Check which pattern matched (city pattern or ward/town/village pattern)
-            if match.group(1):  # First pattern: prefecture + city (+ optional ward)
-                prefecture = match.group(1)
-                county = match.group(2)
-                city_name = match.group(3) + match.group(4)  # name + 市
-                if match.group(5):  # Additional ward
-                    city_name += match.group(5)
-            else:  # Second pattern: prefecture + ward/town/village
-                prefecture = match.group(6)
-                county = match.group(7)
-                city_name = match.group(8) + match.group(9)  # name + 区/町/村
+        if match.group(1):  # Pattern 1: city (市) form
+            prefecture = match.group(1)
+            county = match.group(2)
+            city = match.group(3) + match.group(4)  # name + 市
+            if match.group(5):
+                city += match.group(5)               # + ward (区)
+        else:               # Pattern 2: ward/town/village (区|町|村) form
+            prefecture = match.group(6)
+            county = match.group(7)
+            city = match.group(8) + match.group(9)  # name + 区/町/村
 
-            address_obj = {
-                "full_address": full_address,
-                "prefecture": prefecture,
-                "county": county if county else None,
-                "city": city_name
-            }
-            addresses.append(address_obj)
-            seen.add(full_address)
+        addresses.append({
+            "full_address": full_address,
+            "prefecture": prefecture,
+            "county": county if county else None,
+            "city": city,
+        })
+        seen.add(full_address)
 
     return json.dumps(addresses, ensure_ascii=False, indent=2)
 
@@ -162,13 +160,10 @@ if __name__ == "__main__":
         sys.stdin = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8')
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
-    # Read text from stdin or file
     if len(sys.argv) > 1:
         with open(sys.argv[1], 'r', encoding='utf-8') as f:
             text_content = f.read()
     else:
         text_content = sys.stdin.read()
 
-    # Extract addresses and print JSON
-    result = extract_addresses(text_content)
-    print(result)
+    print(extract_addresses(text_content))

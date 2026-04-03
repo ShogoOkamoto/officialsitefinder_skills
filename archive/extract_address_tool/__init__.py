@@ -1,8 +1,7 @@
 """Japanese address extraction tool.
 
-Extracts Japanese addresses from plain text up to city/ward/town/village level.
-Street-level details (丁目・番地・号) are intentionally omitted.
-Use extract_full_address_tool to include those.
+This module provides functionality to extract Japanese addresses
+from plain text and return them in JSON format.
 """
 
 from .extract import extract_addresses, extract_addresses_list, extract_addresses_detailed
