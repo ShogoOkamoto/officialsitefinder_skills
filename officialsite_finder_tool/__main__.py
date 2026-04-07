@@ -190,9 +190,11 @@ def main():
     # Content judgment (v6): judge_officialsite_content_skill result
     parser.add_argument("--content-judgment", help="Content judgment result (Yes/No)")
     parser.add_argument("--content-pending-url", help="URL pending content judgment")
+    parser.add_argument("--content-judgment-reason", help="Reason for content judgment (logged)")
     # Criteria judgment (v5)
     parser.add_argument("--criteria-judgment", help="Criteria eligibility judgment (eligible/not_eligible)")
     parser.add_argument("--criteria-pending-url", help="URL pending criteria judgment")
+    parser.add_argument("--criteria-judgment-reason", help="Reason for criteria judgment (logged)")
     parser.add_argument("--criteria-file", help="Path to criteria.txt (default: criteria.txt in project root)")
     parser.add_argument("--matched-address", help="Matched address (passed back after judgment)")
     parser.add_argument("--skip-urls", help="JSON array of URLs to skip in search loop")
@@ -249,6 +251,9 @@ def main():
     if args.content_judgment and args.content_pending_url:
         log_print(f"[INFO] === コンテンツ判定結果を受信: {args.content_judgment}")
         log_print(f"[INFO]   URL: {args.content_pending_url}")
+        if args.content_judgment_reason:
+            for line in args.content_judgment_reason.strip().splitlines():
+                log_print(f"[INFO]   理由: {line}")
         matched_address = args.matched_address or ""
 
         if args.content_judgment.lower() == "yes":
@@ -287,6 +292,7 @@ def main():
 
         else:  # No
             log_print(f"[INFO]   → No: 公式サイトのトップページでない → スキップ")
+
             skip_urls.add(args.content_pending_url)
             # Fall through to URL loop with updated skip_urls
 
@@ -294,6 +300,9 @@ def main():
     if args.criteria_judgment and args.criteria_pending_url:
         log_print(f"[INFO] === criteria判定結果を受信: {args.criteria_judgment}")
         log_print(f"[INFO]   URL: {args.criteria_pending_url}")
+        if args.criteria_judgment_reason:
+            for line in args.criteria_judgment_reason.strip().splitlines():
+                log_print(f"[INFO]   理由: {line}")
         matched_address = args.matched_address or ""
 
         if args.criteria_judgment.lower() == "eligible":
