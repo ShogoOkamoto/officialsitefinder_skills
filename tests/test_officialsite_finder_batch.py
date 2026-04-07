@@ -22,7 +22,6 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from urllib.parse import urlparse
 
 import pytest
 
@@ -64,10 +63,55 @@ def _run_tool(*args, timeout=90):
     return json.loads(result.stdout.strip()), result.returncode
 
 
-def _is_top_page_url(url):
-    """URL structure heuristic: True if URL is a domain root or simple index page."""
-    path = urlparse(url).path.rstrip('/')
-    return path in ('', '/index.html', '/index.php', '/index.htm')
+def _llm_judge_content(output: dict) -> tuple:
+    """LLMを使ってコンテンツ判定を行う。Returns (judgment, reason)."""
+    facility_name = output.get("facility_name", "")
+    url = output.get("url", "")
+    title = output.get("title", "")
+    html_text = output.get("html_text_preview", "")
+    address_matched = output.get("address_matched", False)
+
+    prompt = f"""以下のページが施設「{facility_name}」の公式サイトのトップページか判定してください。
+
+施設名: {facility_name}
+URL: {url}
+タイトル: {title}
+住所照合結果: {address_matched}（True=施設住所と一致）
+
+ページテキスト（先頭5000文字）:
+{html_text}
+
+## 判定基準
+
+### 公式サイトでない場合は No:
+- 口コミ・グルメサイト（食べログ、ホットペッパー等）
+- SNS（Facebook, Twitter/X等）
+- 百科事典・まとめサイト（Wikipedia等）
+- 地図・ナビサイト、求人サイト、比較サイト、ポータルサイト
+
+### トップページでない場合は No:
+- /access, /map などアクセス・地図ページ
+- /department/xxx など診療科・詳細ページ
+- /news, /recruit, /contact などサブページ
+
+### 重要:
+- 大学や企業グループのドメイン下のサブディレクトリ（例: /hospital/）で運営されていても公式サイトとみなす
+- address_matched=True かつタイトルが施設名と一致する場合は積極的に Yes と判定すること
+
+最初の行に「Yes」または「No」のみを出力し、2行目以降に理由を列挙してください。"""
+
+    result = subprocess.run(
+        ["claude", "-p", prompt],
+        capture_output=True,
+        text=True,
+        timeout=180,
+        encoding="utf-8",
+    )
+    response = result.stdout.strip()
+    lines = response.splitlines()
+    judgment = lines[0].strip() if lines else "No"
+    reason = "\n".join(lines[1:]).strip() if len(lines) > 1 else "(理由なし)"
+    return judgment, reason
 
 
 def _judgment_loop(name, address, output, rc, max_iterations=15):
@@ -75,7 +119,7 @@ def _judgment_loop(name, address, output, rc, max_iterations=15):
 
     Auto-judgment rules:
       - request_criteria_judgment  → always "eligible"
-      - request_content_judgment   → "Yes" if URL is a root-level page, "No" otherwise
+      - request_content_judgment   → LLM判定（judge_officialsite_content_skill基準）
     """
     accumulated_skip_urls = []
 
@@ -97,12 +141,14 @@ def _judgment_loop(name, address, output, rc, max_iterations=15):
         elif action == "request_content_judgment":
             search_results = output.get("search_results", [])
             target_address = output.get("target_address", "")
-            if _is_top_page_url(url):
+            judgment, reason = _llm_judge_content(output)
+            if judgment.lower() == "yes":
                 output, rc = _run_tool(
                     "--name", name, "--address", address,
                     "--content-judgment", "Yes",
                     "--content-pending-url", url,
                     "--matched-address", matched_address,
+                    "--content-judgment-reason", reason,
                 )
             else:
                 accumulated_skip_urls.append(url)
@@ -113,6 +159,7 @@ def _judgment_loop(name, address, output, rc, max_iterations=15):
                     "--search-results", json.dumps(search_results),
                     "--target-address", target_address,
                     "--skip-urls", json.dumps(accumulated_skip_urls),
+                    "--content-judgment-reason", reason,
                 )
         else:
             break

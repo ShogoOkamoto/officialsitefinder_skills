@@ -254,6 +254,8 @@ def main():
         if args.content_judgment_reason:
             for line in args.content_judgment_reason.strip().splitlines():
                 log_print(f"[INFO]   理由: {line}")
+        else:
+            log_print(f"[INFO]   理由: (理由が渡されていません)")
         matched_address = args.matched_address or ""
 
         if args.content_judgment.lower() == "yes":
